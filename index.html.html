@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>낮과 밤의 세계</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a202c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            color: white;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+            background-color: black;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10;
+            backdrop-filter: blur(4px);
+        }
+        .hidden {
+            display: none !important;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 12px 32px;
+            color: white;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+        .btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+        /* Sound Toggle Button */
+        #sound-toggle {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            z-index: 20;
+            background: rgba(30, 41, 59, 0.8);
+            border: 2px solid #475569;
+            color: white;
+            font-size: 1.5rem;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        #sound-toggle:hover {
+            transform: scale(1.1);
+            background: rgba(51, 65, 85, 0.9);
+        }
+        /* In-game Controls HUD Overlay */
+        #controls-hud {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(6px);
+            padding: 6px 18px;
+            border-radius: 9999px;
+            display: flex;
+            gap: 14px;
+            align-items: center;
+            font-size: 0.82rem;
+            color: #cbd5e1;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+        .key-badge {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fef08a;
+            padding: 2px 7px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 0.8rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        /* Credit watermark on start screen */
+        .credit-watermark {
+            position: absolute;
+            bottom: 12px;
+            left: 16px;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.35);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .credit-watermark:hover {
+            color: rgba(255, 255, 255, 0.7);
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- Sound Toggle Button -->
+    <button id="sound-toggle" aria-label="Toggle Sound">🔊</button>
+
+    <!-- In-game Controls HUD -->
+    <div id="controls-hud">
+        <span><span class="key-badge">A/D</span> 또는 <span class="key-badge">⬅️/➡️</span> 이동</span>
+        <span><span class="key-badge">Space</span> 또는 <span class="key-badge">⬆️</span> 점프</span>
+        <span><span class="key-badge">S</span> 낮/밤 반전</span>
+        <span><span class="key-badge">T</span> 캐릭터 변경</span>
+        <span><span class="key-badge">R</span> 일시정지</span>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <!-- Start Screen -->
+    <div id="start-screen" class="overlay">
+        <h1 class="text-5xl font-extrabold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-indigo-400">낮과 밤의 세계</h1>
+        <p class="text-gray-300 mb-6 text-center max-w-md leading-relaxed">
+            귀여운 캐릭터가 되어 생선을 맛있게 드세요!<br><br>
+            <span class="text-yellow-400 font-bold">[S]</span> 키를 누르면 낮과 밤이 바뀝니다.<br>
+            <span class="text-pink-400 font-bold">[T]</span> 키를 누르면 캐릭터가 변경됩니다! (10% 황금 고양이✨)<br>
+            <span class="text-indigo-400 font-bold">[R]</span> 키를 누르면 일시정지 메뉴가 열립니다.<br><br>
+            ⚠️ <span class="text-red-400 font-semibold">스테이지가 오를수록 바닥에 구멍이 뚫리고 발판이 줄어듭니다!</span><br><br>
+            조작: <span class="text-indigo-300">A/D 또는 ⬅️/➡️ (이동)</span> | <span class="text-indigo-300">Space 또는 ⬆️ (점프)</span>
+        </p>
+        <button id="start-btn" class="btn">시작</button>
+
+        <!-- 출처 표시 (구석에 아주 작게) -->
+        <a href="https://mixkit.co/" target="_blank" rel="noopener noreferrer" class="credit-watermark">
+            Sound source: https://mixkit.co/
+        </a>
+    </div>
+
+    <!-- Pause Screen -->
+    <div id="pause-screen" class="overlay hidden">
+        <h2 class="text-4xl font-bold mb-6 text-yellow-300">일시 정지</h2>
+        <div class="flex flex-col gap-4 w-64">
+            <button id="resume-btn" class="btn">계속하기</button>
+            <button id="restart-btn" class="btn">다시하기</button>
+            <button id="pause-mute-btn" class="btn">음소거</button>
+        </div>
+    </div>
+
+    <!-- Win Screen -->
+    <div id="win-screen" class="overlay hidden">
+        <h2 class="text-4xl font-bold mb-2 text-green-400">생선 획득 성공! 🐟</h2>
+        <p id="win-stage-msg" class="text-xl text-yellow-300 mb-6">Stage 1 클리어!</p>
+        <p class="text-gray-300 mb-8 text-center">다음 단계는 발판이 더 줄어들고 위험해집니다.</p>
+        <button id="next-btn" class="btn">다음 스테이지</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI Elements
+    const startScreen = document.getElementById('start-screen');
+    const pauseScreen = document.getElementById('pause-screen');
+    const winScreen = document.getElementById('win-screen');
+    const startBtn = document.getElementById('start-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const resumeBtn = document.getElementById('resume-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const pauseMuteBtn = document.getElementById('pause-mute-btn');
+    const soundToggleBtn = document.getElementById('sound-toggle');
+    const winStageMsg = document.getElementById('win-stage-msg');
+
+    // --- Audio System ---
+    const audioFiles = {
+        bgm: new Audio('sound/bgm.wav'),
+        jump: new Audio('sound/jump.wav'),
+        clear: new Audio('sound/clear.wav'),
+        change: new Audio('sound/change.wav')
+    };
+    audioFiles.bgm.loop = true;
+    
+    let isSoundEnabled = true;
+
+    function updateSoundUI() {
+        soundToggleBtn.innerText = isSoundEnabled ? '🔊' : '🔇';
+        pauseMuteBtn.innerText = isSoundEnabled ? '음소거' : '음소거 해제';
+    }
+
+    function toggleSound() {
+        isSoundEnabled = !isSoundEnabled;
+        updateSoundUI();
+        
+        if (isSoundEnabled) {
+            if (gameState === 'PLAYING') {
+                playBGM();
+            }
+        } else {
+            audioFiles.bgm.pause();
+        }
+    }
+
+    // Toggle Sound Button Logic
+    soundToggleBtn.addEventListener('click', toggleSound);
+    pauseMuteBtn.addEventListener('click', toggleSound);
+
+    // Play Background Music safely
+    function playBGM() {
+        if (!isSoundEnabled) return;
+        audioFiles.bgm.play().catch(err => {
+            console.log("BGM 재생 불가:", err);
+        });
+    }
+
+    // Play Sound Effects
+    function playSFX(audioObj) {
+        if (!isSoundEnabled) return;
+        
+        const soundClone = audioObj.cloneNode();
+        soundClone.volume = 0.8;
+        soundClone.play().catch(err => {
+            console.log("SFX 재생 불가:", err);
+        });
+    }
+
+    // --- Game State ---
+    let gameState = 'START'; // START, PLAYING, PAUSED, WON
+    let isNight = false;
+    let stageCount = 1;
+
+    // Character Profiles
+    const characters = [
+        { type: 'cat', color: '#8B4513', eyeColor: '#00FF00', name: '갈색 고양이' },
+        { type: 'cat', color: '#FFFFFF', eyeColor: '#3b82f6', name: '흰색 고양이' },
+        { type: 'dog', color: '#FFFFFF', eyeColor: '#000000', name: '흰색 강아지' },
+        { type: 'dog', color: '#A0522D', eyeColor: '#331100', name: '갈색 강아지' },
+        { type: 'cat', color: '#111111', eyeColor: '#fde047', name: '검정색 고양이' },
+        { type: 'gold_cat', color: '#FFD700', eyeColor: '#FFFFFF', name: '황금 고양이✨' }
+    ];
+
+    let currentSkinIndex = 4; // Default: Black Cat
+
+    // Input State
+    const keys = {
+        left: false,
+        right: false,
+        jump: false
+    };
+
+    // Entities
+    const player = {
+        x: 50, y: 500, w: 30, h: 30,
+        vx: 0, vy: 0,
+        speed: 5, jumpPower: -12,
+        gravity: 0.6, onGround: false,
+        dir: 1
+    };
+
+    let platforms = [];
+    let targetFish = { x: 0, y: 0, w: 40, h: 30 };
+    let buildingsDay = [];
+    let buildingsNight = [];
+    let stars = [];
+
+    // Switch Character Logic
+    function switchCharacter() {
+        // 10% chance for Gold Cat, else equal chance among others
+        const isGold = Math.random() < 0.10;
+        if (isGold) {
+            currentSkinIndex = 5; // Gold Cat
+        } else {
+            // Pick randomly from index 0 to 4
+            currentSkinIndex = Math.floor(Math.random() * 5);
+        }
+        playSFX(audioFiles.change);
+    }
+
+    // --- Initialization & Generation ---
+
+    function initGame() {
+        generateBackgrounds();
+        generateLevel();
+        gameState = 'PLAYING';
+        startScreen.classList.add('hidden');
+        pauseScreen.classList.add('hidden');
+        winScreen.classList.add('hidden');
+        isNight = false; // Always start day
+        
+        playBGM();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Reset game state and return to the main start screen
+    function resetToStartScreen() {
+        gameState = 'START';
+        stageCount = 1;
+        isNight = false;
+        
+        audioFiles.bgm.pause();
+        audioFiles.bgm.currentTime = 0;
+
+        pauseScreen.classList.add('hidden');
+        winScreen.classList.add('hidden');
+        startScreen.classList.remove('hidden');
+
+        // Draw initial background behind UI
+        generateBackgrounds();
+        drawBackground();
+    }
+
+    function togglePause() {
+        if (gameState === 'PLAYING') {
+            gameState = 'PAUSED';
+            pauseScreen.classList.remove('hidden');
+            audioFiles.bgm.pause();
+        } else if (gameState === 'PAUSED') {
+            gameState = 'PLAYING';
+            pauseScreen.classList.add('hidden');
+            playBGM();
+            requestAnimationFrame(gameLoop);
+        }
+    }
+
+    function generateBackgrounds() {
+        buildingsDay = [];
+        buildingsNight = [];
+        stars = [];
+        for(let i = 0; i < 20; i++) {
+            buildingsDay.push({
+                x: i * 50 - 20, w: 40 + Math.random() * 40,
+                h: 100 + Math.random() * 200, color: '#94a3b8'
+            });
+            buildingsNight.push({
+                x: i * 60 - 30, w: 50 + Math.random() * 50,
+                h: 150 + Math.random() * 250, color: '#1e1e2f',
+                windows: Array.from({length: 5}, () => ({
+                    wx: Math.random() * 30, wy: Math.random() * 100 + 20
+                }))
+            });
+        }
+        for(let i = 0; i < 50; i++) {
+            stars.push({
+                x: Math.random() * canvas.width, y: Math.random() * canvas.height / 2,
+                size: Math.random() * 2, opacity: Math.random()
+            });
+        }
+    }
+
+    function generateLevel() {
+        platforms = [];
+
+        let holeCount = Math.min(Math.floor((stageCount - 1) / 1.5), 3); 
+
+        if (holeCount === 0) {
+            platforms.push({x: 0, y: 550, w: canvas.width, h: 50, type: 'ALL'});
+        } else {
+            let currentX = 0;
+            let safeStartWidth = 120;
+            platforms.push({x: 0, y: 550, w: safeStartWidth, h: 50, type: 'ALL'});
+            currentX = safeStartWidth;
+
+            let remainingWidth = canvas.width - safeStartWidth;
+            let holeWidth = 70 + Math.min(stageCount * 5, 40);
+            
+            for (let h = 0; h < holeCount; h++) {
+                let segmentWidth = Math.max(80, (remainingWidth / (holeCount + 1)) - holeWidth);
+                currentX += holeWidth;
+                platforms.push({x: currentX, y: 550, w: segmentWidth, h: 50, type: 'ALL'});
+                currentX += segmentWidth;
+            }
+
+            if (currentX < canvas.width) {
+                platforms.push({x: currentX, y: 550, w: canvas.width - currentX, h: 50, type: 'ALL'});
+            }
+        }
+        
+        let platformCount = Math.max(3, 7 - Math.floor(stageCount / 2));
+        let currentY = 550;
+        let currentX = Math.random() * 200 + 100;
+        let heightStep = (400) / platformCount;
+
+        for (let i = 0; i < platformCount; i++) {
+            currentY -= (heightStep + (Math.random() * 20 - 10));
+            let width = Math.max(50, (90 - stageCount * 3) + Math.random() * 40);
+            let xOffset = (Math.random() > 0.5 ? 1 : -1) * (100 + Math.random() * 120);
+            currentX += xOffset;
+            
+            if (currentX < 30) currentX = 30;
+            if (currentX + width > canvas.width - 30) currentX = canvas.width - width - 30;
+
+            let type;
+            let rand = Math.random();
+            let dayNightProb = Math.min(0.8, 0.4 + stageCount * 0.1);
+
+            if (rand < dayNightProb) {
+                type = Math.random() > 0.5 ? 'DAY' : 'NIGHT';
+            } else {
+                type = 'ALL';
+            }
+
+            platforms.push({x: currentX, y: currentY, w: width, h: 15, type: type});
+        }
+
+        // Place target fish on top platform
+        let topPlat = platforms[platforms.length - 1];
+        targetFish = {
+            x: topPlat.x + topPlat.w / 2 - 20,
+            y: topPlat.y - 40,
+            w: 40, h: 30
+        };
+
+        // Reset Player
+        player.x = 40;
+        player.y = 500;
+        player.vx = 0;
+        player.vy = 0;
+        player.dir = 1;
+    }
+
+    // --- Input Handling ---
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyR') {
+            if (gameState === 'PLAYING' || gameState === 'PAUSED') {
+                togglePause();
+            }
+            return;
+        }
+
+        if (gameState !== 'PLAYING') return;
+
+        if (e.code === 'KeyT') {
+            switchCharacter();
+            return;
+        }
+        
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = true;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = true;
+        if (e.code === 'Space' || e.code === 'ArrowUp') {
+            keys.jump = true;
+            e.preventDefault();
+        }
+        
+        if (e.code === 'KeyS') {
+            isNight = !isNight;
+            playSFX(audioFiles.change);
+            handlePhaseShift();
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'KeyA' || e.code === 'ArrowLeft') keys.left = false;
+        if (e.code === 'KeyD' || e.code === 'ArrowRight') keys.right = false;
+        if (e.code === 'Space' || e.code === 'ArrowUp') keys.jump = false;
+    });
+
+    function handlePhaseShift() {
+        for (let p of platforms) {
+            if (isPlatformActive(p) && checkCollision(player, p)) {
+                player.y = p.y - player.h;
+                player.vy = 0;
+                player.onGround = true;
+            }
+        }
+    }
+
+    // --- Core Logic ---
+
+    function isPlatformActive(p) {
+        if (p.type === 'ALL') return true;
+        if (p.type === 'DAY' && !isNight) return true;
+        if (p.type === 'NIGHT' && isNight) return true;
+        return false;
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.w &&
+               r1.x + r1.w > r2.x &&
+               r1.y < r2.y + r2.h &&
+               r1.y + r1.h > r2.y;
+    }
+
+    function update() {
+        if (keys.left) { player.vx = -player.speed; player.dir = -1; }
+        else if (keys.right) { player.vx = player.speed; player.dir = 1; }
+        else { player.vx *= 0.8; }
+
+        if (keys.jump && player.onGround) {
+            player.vy = player.jumpPower;
+            player.onGround = false;
+            playSFX(audioFiles.jump);
+        }
+
+        player.vy += player.gravity;
+        player.x += player.vx;
+        
+        if(player.x < 0) player.x = 0;
+        if(player.x + player.w > canvas.width) player.x = canvas.width - player.w;
+
+        for (let p of platforms) {
+            if (isPlatformActive(p)) {
+                if (checkCollision(player, p)) {
+                    if (player.vx > 0) player.x = p.x - player.w;
+                    else if (player.vx < 0) player.x = p.x + p.w;
+                    player.vx = 0;
+                }
+            }
+        }
+
+        player.y += player.vy;
+        player.onGround = false;
+
+        for (let p of platforms) {
+            if (isPlatformActive(p)) {
+                if (checkCollision(player, p)) {
+                    if (player.vy > 0) {
+                        player.y = p.y - player.h;
+                        player.onGround = true;
+                    } else if (player.vy < 0) {
+                        player.y = p.y + p.h;
+                    }
+                    player.vy = 0;
+                }
+            }
+        }
+        
+        if (player.y > canvas.height + 50) {
+            player.x = 40; 
+            player.y = 500; 
+            player.vy = 0;
+            player.vx = 0;
+        }
+
+        // Win Condition Check with Fish Target
+        if (checkCollision(player, targetFish)) {
+            gameState = 'WON';
+            winStageMsg.innerText = `Stage ${stageCount} 클리어!`;
+            winScreen.classList.remove('hidden');
+            playSFX(audioFiles.clear);
+            audioFiles.bgm.pause();
+        }
+    }
+
+    // --- Rendering ---
+
+    function drawBackground() {
+        if (!isNight) {
+            let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, '#87CEEB');
+            grad.addColorStop(1, '#e0f6ff');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(100, 100, 40, 0, Math.PI * 2);
+            ctx.fill();
+
+            buildingsDay.forEach(b => {
+                ctx.fillStyle = b.color;
+                ctx.fillRect(b.x, canvas.height - b.h - 50, b.w, b.h);
+            });
+        } else {
+            let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, '#0f172a');
+            grad.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = 'white';
+            stars.forEach(s => {
+                ctx.globalAlpha = s.opacity;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+
+            ctx.fillStyle = '#fef08a';
+            ctx.beginPath();
+            ctx.arc(canvas.width - 120, 100, 35, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#0f172a';
+            ctx.beginPath();
+            ctx.arc(canvas.width - 130, 90, 35, 0, Math.PI * 2);
+            ctx.fill();
+
+            buildingsNight.forEach(b => {
+                ctx.fillStyle = b.color;
+                let by = canvas.height - b.h - 50;
+                ctx.fillRect(b.x, by, b.w, b.h);
+                
+                ctx.fillStyle = '#fef08a';
+                b.windows.forEach(w => {
+                    if(Math.random() > 0.05) {
+                        ctx.fillRect(b.x + w.wx, by + w.wy, 10, 15);
+                    }
+                });
+            });
+        }
+    }
+
+    function drawPlatforms() {
+        platforms.forEach(p => {
+            if (p.type === 'ALL') {
+                ctx.fillStyle = '#475569';
+                ctx.fillRect(p.x, p.y, p.w, p.h);
+                ctx.fillStyle = '#64748b';
+                ctx.fillRect(p.x, p.y, p.w, 4);
+            } else if (p.type === 'DAY') {
+                if (!isNight) {
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.shadowColor = '#f59e0b';
+                    ctx.shadowBlur = 10;
+                    ctx.fillRect(p.x, p.y, p.w, p.h);
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.strokeStyle = 'rgba(251, 191, 36, 0.25)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeRect(p.x, p.y, p.w, p.h);
+                    ctx.setLineDash([]);
+                }
+            } else if (p.type === 'NIGHT') {
+                if (isNight) {
+                    ctx.fillStyle = '#818cf8';
+                    ctx.shadowColor = '#6366f1';
+                    ctx.shadowBlur = 15;
+                    ctx.fillRect(p.x, p.y, p.w, p.h);
+                    ctx.shadowBlur = 0;
+                } else {
+                    ctx.strokeStyle = 'rgba(129, 140, 248, 0.25)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeRect(p.x, p.y, p.w, p.h);
+                    ctx.setLineDash([]);
+                }
+            }
+        });
+    }
+
+    // Fish Drawing Function
+    function drawFish() {
+        let time = Date.now() / 200;
+        let floatY = Math.sin(time) * 4;
+        
+        ctx.save();
+        ctx.translate(targetFish.x + targetFish.w / 2, targetFish.y + targetFish.h / 2 + floatY);
+
+        // Fish Glowing aura
+        ctx.shadowColor = '#38bdf8';
+        ctx.shadowBlur = 15;
+
+        // Fish Body
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 16, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Fish Tail
+        ctx.beginPath();
+        ctx.moveTo(-12, 0);
+        ctx.lineTo(-22, -9);
+        ctx.lineTo(-20, 0);
+        ctx.lineTo(-22, 9);
+        ctx.closePath();
+        ctx.fill();
+
+        // Fish Fins
+        ctx.beginPath();
+        ctx.moveTo(2, -8);
+        ctx.lineTo(-3, -15);
+        ctx.lineTo(-4, -8);
+        ctx.closePath();
+        ctx.fill();
+
+        // Fish Eye
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(8, -3, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(9, -3, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Decorative Bone Stripes
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-2, -6);
+        ctx.lineTo(-2, 6);
+        ctx.moveTo(3, -6);
+        ctx.lineTo(3, 6);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function drawCharacter() {
+        ctx.save();
+        ctx.translate(player.x + player.w / 2, player.y + player.h / 2);
+        if (player.dir === -1) ctx.scale(-1, 1);
+
+        let scaleY = 1;
+        let scaleX = 1;
+        if(Math.abs(player.vy) > 2) {
+            scaleY = 1.1;
+            scaleX = 0.9;
+        }
+        ctx.scale(scaleX, scaleY);
+
+        const currentSkin = characters[currentSkinIndex];
+        const isGold = (currentSkin.type === 'gold_cat');
+
+        // Sparkle / Aura Effect for Gold Cat
+        if (isGold) {
+            ctx.shadowColor = '#FFD700';
+            ctx.shadowBlur = 20 + Math.sin(Date.now() / 100) * 10;
+
+            // Rotating Sparkle Particles around player
+            ctx.fillStyle = '#FFFFFF';
+            for (let i = 0; i < 4; i++) {
+                let angle = (Date.now() / 150) + (i * Math.PI / 2);
+                let sparkX = Math.cos(angle) * 22;
+                let sparkY = Math.sin(angle) * 22;
+                let sparkSize = 2 + Math.sin(Date.now() / 50 + i) * 1.5;
+                ctx.beginPath();
+                ctx.arc(sparkX, sparkY, Math.max(0.5, sparkSize), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        const charColor = currentSkin.color;
+
+        if (currentSkin.type === 'cat' || currentSkin.type === 'gold_cat') {
+            // --- CAT DRAWING ---
+            // Tail
+            ctx.strokeStyle = charColor;
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-12, 5);
+            ctx.quadraticCurveTo(-25, 0, -22, -15 + Math.sin(Date.now()/150)*3);
+            ctx.stroke();
+
+            // Body
+            ctx.fillStyle = charColor;
+            ctx.beginPath();
+            ctx.ellipse(0, 5, 16, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(6, -5, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ears
+            ctx.beginPath();
+            ctx.moveTo(-1, -12);
+            ctx.lineTo(-4, -22);
+            ctx.lineTo(6, -16);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(7, -15);
+            ctx.lineTo(13, -22);
+            ctx.lineTo(15, -12);
+            ctx.fill();
+
+            // Eyes
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = currentSkin.eyeColor;
+            ctx.beginPath();
+            ctx.arc(9, -7, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(15, -7, 3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(10, -7, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(16, -7, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+        } else if (currentSkin.type === 'dog') {
+            // --- DOG DRAWING ---
+            // Wagging Tail
+            ctx.strokeStyle = charColor;
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(-12, 3);
+            ctx.quadraticCurveTo(-20, -5, -18, -12 + Math.sin(Date.now()/80)*4);
+            ctx.stroke();
+
+            // Body
+            ctx.fillStyle = charColor;
+            ctx.beginPath();
+            ctx.ellipse(0, 5, 16, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Head
+            ctx.beginPath();
+            ctx.arc(6, -5, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Floppy Ears
+            ctx.beginPath();
+            ctx.ellipse(0, -5, 5, 10, Math.PI / 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.ellipse(10, -5, 5, 10, -Math.PI / 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Snout / Muzzle
+            ctx.fillStyle = '#fce7f3';
+            ctx.beginPath();
+            ctx.ellipse(12, -2, 6, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Nose
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.arc(16, -4, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = currentSkin.eyeColor;
+            ctx.beginPath();
+            ctx.arc(7, -8, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(13, -8, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    function drawStageInfo() {
+        ctx.fillStyle = isNight ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.85)';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.fillText(`Stage ${stageCount}`, 20, 35);
+        
+        ctx.font = '14px sans-serif';
+        let modeText = isNight ? '🌙 밤 (Night)' : '☀️ 낮 (Day)';
+        ctx.fillText(modeText, 20, 58);
+
+        // Active Character HUD Indicator
+        const currentChar = characters[currentSkinIndex];
+        ctx.fillStyle = currentChar.type === 'gold_cat' ? '#fde047' : (isNight ? '#cbd5e1' : '#334155');
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText(`캐릭터: ${currentChar.name}`, 20, 80);
+    }
+
+    function gameLoop() {
+        if (gameState !== 'PLAYING') return;
+
+        update();
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBackground();
+        drawPlatforms();
+        drawFish();
+        drawCharacter();
+        drawStageInfo();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // --- Buttons ---
+    startBtn.addEventListener('click', () => {
+        stageCount = 1;
+        initGame();
+    });
+
+    resumeBtn.addEventListener('click', () => {
+        togglePause();
+    });
+
+    // Return to the first start screen on Restart
+    restartBtn.addEventListener('click', () => {
+        resetToStartScreen();
+    });
+    
+    nextBtn.addEventListener('click', () => {
+        stageCount++;
+        initGame();
+    });
+
+    // Initial render
+    generateBackgrounds();
+    drawBackground();
+
+</script>
+</body>
+</html>
